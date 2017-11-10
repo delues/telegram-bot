@@ -90,7 +90,8 @@ class Updater(object):
                  workers=4,
                  bot=None,
                  user_sig_handler=None,
-                 request_kwargs=None):
+                 request_kwargs=None,
+                 persistence=None):
 
         if (token is None) and (bot is None):
             raise ValueError('`token` or `bot` must be passed')
@@ -122,14 +123,24 @@ class Updater(object):
             self.bot = Bot(token, base_url, request=self._request)
         self.user_sig_handler = user_sig_handler
         self.update_queue = Queue()
-        self.job_queue = JobQueue(self.bot)
+        self.persistence = persistence
+        self.job_queue = None
+        if self.persistence:
+            if self.persistence.store_job_queue:
+                self.job_queue = self.persistence.get_job_queue()
+                if not isinstance(self.job_queue, JobQueue):
+                    raise ValueError("job_queue must be of type JobQueue")
+
+        if not self.job_queue:
+            self.job_queue = JobQueue(self.bot)
         self.__exception_event = Event()
         self.dispatcher = Dispatcher(
             self.bot,
             self.update_queue,
             job_queue=self.job_queue,
             workers=workers,
-            exception_event=self.__exception_event)
+            exception_event=self.__exception_event,
+            persistence=self.persistence)
         self.last_update_id = 0
         self.running = False
         self.is_idle = False
